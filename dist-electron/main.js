@@ -1,71 +1,53 @@
-import { app, ipcMain, BrowserWindow } from "electron";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
-app.name = "Matchi";
-if (process.platform === "win32") {
-  app.setAppUserModelId("Matchi");
-}
-const __dirname$1 = path.dirname(fileURLToPath(import.meta.url));
-process.env.APP_ROOT = path.join(__dirname$1, "..");
-const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
-const MAIN_DIST = path.join(process.env.APP_ROOT, "dist-electron");
-const RENDERER_DIST = path.join(process.env.APP_ROOT, "dist");
-process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, "public") : RENDERER_DIST;
-let win;
-ipcMain.on("window-minimize", () => {
-  win == null ? void 0 : win.minimize();
+import { app as n, ipcMain as s, BrowserWindow as r } from "electron";
+import { fileURLToPath as c } from "node:url";
+import o from "node:path";
+n.name = "Matchi";
+process.platform === "win32" && n.setAppUserModelId("Matchi");
+const a = o.dirname(c(import.meta.url));
+process.env.APP_ROOT = o.join(a, "..");
+const i = process.env.VITE_DEV_SERVER_URL, f = o.join(process.env.APP_ROOT, "dist-electron"), l = o.join(process.env.APP_ROOT, "dist");
+process.env.VITE_PUBLIC = i ? o.join(process.env.APP_ROOT, "public") : l;
+let e;
+s.on("window-minimize", () => {
+  e == null || e.minimize();
 });
-ipcMain.on("window-close", () => {
-  win == null ? void 0 : win.close();
+s.on("window-close", () => {
+  e == null || e.close();
 });
-ipcMain.handle("window-toggle-always-on-top", () => {
-  if (win) {
-    const isTop = !win.isAlwaysOnTop();
-    win.setAlwaysOnTop(isTop, "screen-saver");
-    return isTop;
+s.handle("window-toggle-always-on-top", () => {
+  if (e) {
+    const t = !e.isAlwaysOnTop();
+    return e.setAlwaysOnTop(t, "screen-saver"), t;
   }
-  return false;
+  return !1;
 });
-ipcMain.handle("window-get-always-on-top", () => {
-  return win ? win.isAlwaysOnTop() : false;
-});
-function createWindow() {
-  win = new BrowserWindow({
+s.handle("window-get-always-on-top", () => e ? e.isAlwaysOnTop() : !1);
+function p() {
+  e = new r({
     width: 400,
     height: 600,
-    resizable: false,
-    frame: false,
+    resizable: !1,
+    frame: !1,
     backgroundColor: "#FFFBDE",
-    icon: path.join(process.env.VITE_PUBLIC, "Logo.png"),
+    icon: o.join(process.env.VITE_PUBLIC, "Logo_256.png"),
     webPreferences: {
-      preload: path.join(__dirname$1, "preload.mjs"),
-      nodeIntegration: false,
-      contextIsolation: true
+      preload: o.join(a, "preload.mjs"),
+      nodeIntegration: !1,
+      contextIsolation: !0
     }
-  });
-  win.webContents.on("did-finish-load", () => {
-    win == null ? void 0 : win.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
-  });
-  if (VITE_DEV_SERVER_URL) {
-    win.loadURL(VITE_DEV_SERVER_URL);
-  } else {
-    win.loadFile(path.join(RENDERER_DIST, "index.html"));
-  }
+  }), e.webContents.on("did-finish-load", () => {
+    e == null || e.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
+  }), i ? e.loadURL(i) : e.loadFile(o.join(l, "index.html"));
 }
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-    win = null;
-  }
+n.on("window-all-closed", () => {
+  process.platform !== "darwin" && (n.quit(), e = null);
 });
-app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
-  }
+n.on("activate", () => {
+  r.getAllWindows().length === 0 && p();
 });
-app.whenReady().then(createWindow);
+n.whenReady().then(p);
 export {
-  MAIN_DIST,
-  RENDERER_DIST,
-  VITE_DEV_SERVER_URL
+  f as MAIN_DIST,
+  l as RENDERER_DIST,
+  i as VITE_DEV_SERVER_URL
 };

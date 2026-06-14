@@ -61,7 +61,7 @@ function createWindow() {
     resizable: false,
     frame: false,
     backgroundColor: '#FFFBDE',
-    icon: path.join(process.env.VITE_PUBLIC, 'Logo.png'),
+    icon: path.join(process.env.VITE_PUBLIC, 'Logo_256.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       nodeIntegration: false,
