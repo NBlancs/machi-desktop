@@ -1,10 +1,16 @@
-import { app, BrowserWindow } from 'electron'
-import { createRequire } from 'node:module'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
-const require = createRequire(import.meta.url)
+// Set app name and App User Model ID for Windows Notifications
+app.name = 'Matchi'
+if (process.platform === 'win32') {
+  app.setAppUserModelId('Matchi')
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+
 
 // The built directory structure
 //
@@ -26,11 +32,40 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
 
 let win: BrowserWindow | null
 
+// Register IPC handlers once
+ipcMain.on('window-minimize', () => {
+  win?.minimize()
+})
+
+ipcMain.on('window-close', () => {
+  win?.close()
+})
+
+ipcMain.handle('window-toggle-always-on-top', () => {
+  if (win) {
+    const isTop = !win.isAlwaysOnTop()
+    win.setAlwaysOnTop(isTop, 'screen-saver') // keeps it on top of most windows
+    return isTop
+  }
+  return false
+})
+
+ipcMain.handle('window-get-always-on-top', () => {
+  return win ? win.isAlwaysOnTop() : false
+})
+
 function createWindow() {
   win = new BrowserWindow({
-    icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
+    width: 400,
+    height: 600,
+    resizable: false,
+    frame: false,
+    backgroundColor: '#FFFBDE',
+    icon: path.join(process.env.VITE_PUBLIC, 'Logo.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
+      nodeIntegration: false,
+      contextIsolation: true,
     },
   })
 
@@ -42,14 +77,11 @@ function createWindow() {
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL)
   } else {
-    // win.loadFile('dist/index.html')
     win.loadFile(path.join(RENDERER_DIST, 'index.html'))
   }
 }
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
+// Quit when all windows are closed, except on macOS.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
@@ -58,11 +90,10 @@ app.on('window-all-closed', () => {
 })
 
 app.on('activate', () => {
-  // On OS X it's common to re-create a window in the app when the
-  // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow()
   }
 })
 
 app.whenReady().then(createWindow)
+
