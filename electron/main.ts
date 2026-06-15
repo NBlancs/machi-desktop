@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import fs from 'node:fs/promises'
 
 // Set app name and App User Model ID for Windows Notifications
 app.name = 'Matchi'
@@ -52,6 +53,48 @@ ipcMain.handle('window-toggle-always-on-top', () => {
 
 ipcMain.handle('window-get-always-on-top', () => {
   return win ? win.isAlwaysOnTop() : false
+})
+
+// IPC storage handlers for persistence
+let storageCache: Record<string, any> | null = null
+
+function getStoragePath() {
+  return path.join(app.getPath('userData'), 'storage.json')
+}
+
+async function loadStorageCache(): Promise<Record<string, any>> {
+  if (storageCache !== null) return storageCache
+  try {
+    const filePath = getStoragePath()
+    const content = await fs.readFile(filePath, 'utf-8')
+    storageCache = JSON.parse(content)
+  } catch (err: any) {
+    storageCache = {}
+  }
+  return storageCache || {}
+}
+
+async function saveStorageCache() {
+  if (storageCache === null) return
+  try {
+    const filePath = getStoragePath()
+    await fs.mkdir(path.dirname(filePath), { recursive: true })
+    await fs.writeFile(filePath, JSON.stringify(storageCache, null, 2), 'utf-8')
+  } catch (err) {
+    console.error('Failed to save storage cache to disk:', err)
+  }
+}
+
+ipcMain.handle('store-get', async (_event, key: string) => {
+  const cache = await loadStorageCache()
+  return cache[key] ?? null
+})
+
+ipcMain.handle('store-set', async (_event, key: string, value: any) => {
+  const cache = await loadStorageCache()
+  cache[key] = value
+  await saveStorageCache()
+  return true
 })
 
 function createWindow() {

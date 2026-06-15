@@ -163,50 +163,77 @@ function ConfettiCanvas() {
   )
 }
 
+const hasIPC = typeof window !== 'undefined' && !!window.ipcRenderer
+
+async function getStorageItem<T>(key: string, defaultValue: T): Promise<T> {
+  if (hasIPC) {
+    try {
+      const val = await window.ipcRenderer.invoke('store-get', key)
+      if (val !== null && val !== undefined) {
+        return val as T
+      }
+      // Migration from localStorage
+      try {
+        const localVal = localStorage.getItem(key)
+        if (localVal !== null) {
+          const parsed = JSON.parse(localVal) as T
+          await window.ipcRenderer.invoke('store-set', key, parsed)
+          return parsed
+        }
+      } catch (localErr) {
+        console.error(`localStorage migration failed for ${key}:`, localErr)
+      }
+    } catch (e) {
+      console.error(`IPC store-get failed for ${key}:`, e)
+    }
+  } else {
+    try {
+      const val = localStorage.getItem(key)
+      if (val !== null) {
+        return JSON.parse(val) as T
+      }
+    } catch (e) {
+      console.error(`localStorage get failed for ${key}:`, e)
+    }
+  }
+  return defaultValue
+}
+
+async function setStorageItem<T>(key: string, value: T): Promise<void> {
+  if (hasIPC) {
+    try {
+      await window.ipcRenderer.invoke('store-set', key, value)
+      return
+    } catch (e) {
+      console.error(`IPC store-set failed for ${key}:`, e)
+    }
+  }
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch (e) {
+    console.error(`localStorage set failed for ${key}:`, e)
+  }
+}
+
 function App() {
+  const [isLoaded, setIsLoaded] = useState<boolean>(false)
+
   // Persistence state
-  const [placedBuildings, setPlacedBuildings] = useState<PlacedBuilding[]>(() => {
-    const savedMatchi = localStorage.getItem('matchi_city_buildings')
-    if (savedMatchi) return JSON.parse(savedMatchi)
-    const savedMachi = localStorage.getItem('machi_city_buildings')
-    return savedMachi ? JSON.parse(savedMachi) : []
-  })
-  
-  const [currentBuildingType, setCurrentBuildingType] = useState<number>(() => {
-    const savedMatchi = localStorage.getItem('matchi_current_building_type')
-    if (savedMatchi) return parseInt(savedMatchi, 10)
-    const savedMachi = localStorage.getItem('machi_current_building_type')
-    return savedMachi ? parseInt(savedMachi, 10) : 1
-  })
+  const [placedBuildings, setPlacedBuildings] = useState<PlacedBuilding[]>([])
+  const [currentBuildingType, setCurrentBuildingType] = useState<number>(1)
 
   // Timer states
-  const [duration, setDuration] = useState<number>(() => {
-    const saved = localStorage.getItem('matchi_timer_duration')
-    return saved ? parseInt(saved, 10) : 25
-  })
-  const [timeLeft, setTimeLeft] = useState<number>(() => {
-    const saved = localStorage.getItem('matchi_timer_duration')
-    const mins = saved ? parseInt(saved, 10) : 25
-    return mins * 60
-  })
+  const [duration, setDuration] = useState<number>(25)
+  const [timeLeft, setTimeLeft] = useState<number>(25 * 60)
   const [timerState, setTimerState] = useState<TimerState>('idle')
   const [isDragging, setIsDragging] = useState<boolean>(false)
   const [abandonedSprite, setAbandonedSprite] = useState<string>('')
 
   // Settings
   const [isAlwaysOnTop, setIsAlwaysOnTop] = useState<boolean>(false)
-  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
-    const saved = localStorage.getItem('matchi_settings_sound')
-    return saved !== 'false' // default true
-  })
-  const [tickEnabled, setTickEnabled] = useState<boolean>(() => {
-    const saved = localStorage.getItem('matchi_settings_tick')
-    return saved === 'true' // default false
-  })
-  const [volume, setVolume] = useState<number>(() => {
-    const saved = localStorage.getItem('matchi_settings_volume')
-    return saved ? parseFloat(saved) : 0.5
-  })
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true)
+  const [tickEnabled, setTickEnabled] = useState<boolean>(false)
+  const [volume, setVolume] = useState<number>(0.5)
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false)
   const [selectedBuilding, setSelectedBuilding] = useState<PlacedBuilding | null>(null)
 
@@ -239,30 +266,77 @@ function App() {
     }
   }, [])
 
-  // Sync state back to localStorage
+  // Load state on mount
   useEffect(() => {
-    localStorage.setItem('matchi_city_buildings', JSON.stringify(placedBuildings))
-  }, [placedBuildings])
+    async function loadAllState() {
+      // 1. placedBuildings (with legacy fallback)
+      let buildings = await getStorageItem<PlacedBuilding[] | null>('matchi_city_buildings', null)
+      if (!buildings) {
+        buildings = await getStorageItem<PlacedBuilding[] | null>('machi_city_buildings', null)
+      }
+      if (buildings) {
+        setPlacedBuildings(buildings)
+      }
+
+      // 2. currentBuildingType (with legacy fallback)
+      let bType = await getStorageItem<number | null>('matchi_current_building_type', null)
+      if (bType === null) {
+        bType = await getStorageItem<number | null>('machi_current_building_type', null)
+      }
+      if (bType !== null) {
+        setCurrentBuildingType(bType)
+      }
+
+      // 3. duration
+      const dur = await getStorageItem<number>('matchi_timer_duration', 25)
+      setDuration(dur)
+      setTimeLeft(dur * 60)
+
+      // 4. settings
+      const sound = await getStorageItem<boolean>('matchi_settings_sound', true)
+      setSoundEnabled(sound)
+
+      const tick = await getStorageItem<boolean>('matchi_settings_tick', false)
+      setTickEnabled(tick)
+
+      const vol = await getStorageItem<number>('matchi_settings_volume', 0.5)
+      setVolume(vol)
+
+      setIsLoaded(true)
+    }
+    loadAllState()
+  }, [])
+
+  // Sync state back to persistent storage
+  useEffect(() => {
+    if (!isLoaded) return
+    setStorageItem('matchi_city_buildings', placedBuildings)
+  }, [placedBuildings, isLoaded])
 
   useEffect(() => {
-    localStorage.setItem('matchi_current_building_type', currentBuildingType.toString())
-  }, [currentBuildingType])
+    if (!isLoaded) return
+    setStorageItem('matchi_current_building_type', currentBuildingType)
+  }, [currentBuildingType, isLoaded])
 
   useEffect(() => {
-    localStorage.setItem('matchi_timer_duration', duration.toString())
-  }, [duration])
+    if (!isLoaded) return
+    setStorageItem('matchi_timer_duration', duration)
+  }, [duration, isLoaded])
 
   useEffect(() => {
-    localStorage.setItem('matchi_settings_sound', soundEnabled.toString())
-  }, [soundEnabled])
+    if (!isLoaded) return
+    setStorageItem('matchi_settings_sound', soundEnabled)
+  }, [soundEnabled, isLoaded])
 
   useEffect(() => {
-    localStorage.setItem('matchi_settings_tick', tickEnabled.toString())
-  }, [tickEnabled])
+    if (!isLoaded) return
+    setStorageItem('matchi_settings_tick', tickEnabled)
+  }, [tickEnabled, isLoaded])
 
   useEffect(() => {
-    localStorage.setItem('matchi_settings_volume', volume.toString())
-  }, [volume])
+    if (!isLoaded) return
+    setStorageItem('matchi_settings_volume', volume)
+  }, [volume, isLoaded])
 
   useEffect(() => {
     if (ringAudioRef.current) {
@@ -521,6 +595,10 @@ function App() {
   const startOfDay = new Date()
   startOfDay.setHours(0, 0, 0, 0)
   const completedToday = placedBuildings.filter(b => b.date >= startOfDay.getTime()).length
+
+  if (!isLoaded) {
+    return <div style={{ backgroundColor: '#FFFBDE', width: '100vw', height: '100vh' }}></div>
+  }
 
   return (
     <>
