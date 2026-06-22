@@ -239,6 +239,7 @@ function App() {
 
   const svgRef = useRef<SVGSVGElement | null>(null)
   const ringAudioRef = useRef<HTMLAudioElement | null>(null)
+  const targetTimeRef = useRef<number | null>(null)
 
   const playRingSound = () => {
     if (!ringAudioRef.current) {
@@ -364,19 +365,27 @@ function App() {
     let intervalId: NodeJS.Timeout | null = null
 
     if (timerState === 'running') {
+      // Set the target end time when starting or resuming
+      targetTimeRef.current = Date.now() + timeLeft * 1000
+      let lastTickSecond = Math.ceil(timeLeft)
+
       intervalId = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            return 0
+        const now = Date.now()
+        const target = targetTimeRef.current ?? 0
+        const diffMs = target - now
+        const remainingSeconds = Math.max(0, Math.ceil(diffMs / 1000))
+
+        setTimeLeft(remainingSeconds)
+
+        if (remainingSeconds > 0) {
+          if (remainingSeconds < lastTickSecond) {
+            if (tickEnabled && soundEnabled) {
+              playTick()
+            }
+            lastTickSecond = remainingSeconds
           }
-          
-          if (tickEnabled && soundEnabled) {
-            playTick()
-          }
-          
-          return prev - 1
-        })
-      }, 1000)
+        }
+      }, 200)
     }
 
     return () => {

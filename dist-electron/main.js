@@ -27,7 +27,7 @@ let t = null;
 function u() {
   return o.join(a.getPath("userData"), "storage.json");
 }
-async function w() {
+async function h() {
   if (t !== null) return t;
   try {
     const n = u(), s = await i.readFile(n, "utf-8");
@@ -46,12 +46,12 @@ async function _() {
       console.error("Failed to save storage cache to disk:", n);
     }
 }
-r.handle("store-get", async (n, s) => (await w())[s] ?? null);
+r.handle("store-get", async (n, s) => (await h())[s] ?? null);
 r.handle("store-set", async (n, s, c) => {
-  const m = await w();
+  const m = await h();
   return m[s] = c, await _(), !0;
 });
-function h() {
+function w() {
   e = new d({
     width: 400,
     height: 600,
@@ -62,7 +62,8 @@ function h() {
     webPreferences: {
       preload: o.join(p, "preload.mjs"),
       nodeIntegration: !1,
-      contextIsolation: !0
+      contextIsolation: !0,
+      backgroundThrottling: !1
     }
   }), e.webContents.on("did-finish-load", () => {
     e == null || e.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
@@ -72,9 +73,9 @@ a.on("window-all-closed", () => {
   process.platform !== "darwin" && (a.quit(), e = null);
 });
 a.on("activate", () => {
-  d.getAllWindows().length === 0 && h();
+  d.getAllWindows().length === 0 && w();
 });
-a.whenReady().then(h);
+a.whenReady().then(w);
 export {
   E as MAIN_DIST,
   f as RENDERER_DIST,
