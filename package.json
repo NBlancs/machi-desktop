@@ -1,7 +1,9 @@
 {
   "name": "machi",
   "private": true,
-  "version": "1.0.2",
+  "version": "1.1.2",
+  "author": "Nblancs",
+  "description": "A gamified pomodoro timer",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -25,7 +25,7 @@ body {
   overflow: hidden;
   user-select: none;
   width: 400px;
-  height: 600px;
+  height: 800px;
 }
 
 
@@ -556,6 +556,200 @@ body {
   width: 45px;
   text-align: right;
   color: var(--dark-teal);
+}
+
+/* Mini Mode Styles */
+body.mini-mode {
+  width: 220px !important;
+  height: 310px !important;
+  background-image: none !important;
+  background-color: transparent !important;
+}
+
+.mini-container {
+  width: 220px;
+  height: 310px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  justify-content: flex-start;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+body.mini-mode.solid-bg .mini-container {
+  background-color: var(--bg-cream);
+  border: 3px solid var(--dark-teal);
+  border-radius: 12px;
+}
+
+.mini-titlebar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  height: 26px;
+  padding: 0 6px;
+  z-index: 1000;
+  box-sizing: border-box;
+}
+
+body.mini-mode.solid-bg .mini-titlebar {
+  background-color: var(--primary-teal);
+  border-bottom: 2px solid var(--dark-teal);
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+
+body.mini-mode.transparent-bg .mini-titlebar {
+  background-color: rgba(70, 130, 169, 0.4);
+  border-bottom: 1.5px solid rgba(42, 78, 102, 0.6);
+  border-radius: 8px 8px 0 0;
+}
+
+.mini-titlebar-drag {
+  flex: 1;
+  height: 100%;
+}
+
+.mini-titlebar-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mini-titlebar-controls .titlebar-btn {
+  padding: 2px 4px;
+  font-size: 12px;
+}
+
+.timer-section.mini {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  width: 100%;
+  padding-top: 4px;
+}
+
+.mini-mode .machi-btn {
+  padding: 4px 8px !important;
+  font-size: 11px !important;
+  border-radius: 6px !important;
+  border: 1.5px solid var(--dark-teal) !important;
+  box-shadow: 0 2px 0 var(--dark-teal) !important;
+}
+
+.mini-mode .machi-btn:active {
+  transform: translateY(1.5px) !important;
+  box-shadow: 0 0.5px 0 var(--dark-teal) !important;
+}
+
+.mini-mode .controls-container {
+  gap: 8px !important;
+  margin-top: 6px !important;
+  margin-bottom: 4px !important;
+}
+
+/* Transparent Mini Mode Timer Color Adjustments */
+body.mini-mode.transparent-bg .timer-time {
+  color: #ffffff !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+body.mini-mode.transparent-bg .timer-label {
+  color: rgba(255, 255, 255, 0.8) !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+body.mini-mode.transparent-bg .timer-circle-progress {
+  stroke: #ffffff !important;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+}
+
+body.mini-mode.transparent-bg .timer-circle-bg {
+  stroke: rgba(255, 255, 255, 0.25) !important;
+}
+
+/* Task Input & Label Styles */
+.task-input {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 2px solid var(--dark-teal);
+  background-color: rgba(255, 255, 252, 0.95);
+  color: var(--dark-teal);
+  outline: none;
+  width: 190px;
+  text-align: center;
+  margin-top: 10px;
+  margin-bottom: 2px;
+  transition: border-color 0.15s, background-color 0.15s;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.task-input:focus {
+  border-color: var(--primary-teal);
+  background-color: #ffffff;
+}
+
+.active-task-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary-teal);
+  text-align: center;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  
+  /* Absolute position in normal mode to prevent pushing the layout down */
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+}
+
+/* Reset to relative flow in mini-mode where height is adjusted */
+.mini-mode .active-task-label {
+  position: relative;
+  top: auto;
+  left: auto;
+  transform: none;
+  margin-top: 8px;
+  margin-bottom: 2px;
+  max-width: 180px;
+}
+
+/* Transparent Mini Mode Task Label Adjustment */
+body.mini-mode.transparent-bg .active-task-label {
+  color: #ffffff !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+/* Task Modal Input Style */
+.task-modal-input {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 2px solid var(--dark-teal);
+  background-color: #ffffff;
+  color: var(--dark-teal);
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 8px 0;
+  transition: border-color 0.15s;
+}
+
+.task-modal-input:focus {
+  border-color: var(--primary-teal);
 }
 
 

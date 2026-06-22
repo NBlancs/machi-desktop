@@ -55,6 +55,18 @@ ipcMain.handle('window-get-always-on-top', () => {
   return win ? win.isAlwaysOnTop() : false
 })
 
+ipcMain.on('window-set-mini-mode', (_event, isMini: boolean) => {
+  if (win) {
+    win.setResizable(true)
+    if (isMini) {
+      win.setSize(220, 310)
+    } else {
+      win.setSize(400, 600)
+    }
+    win.setResizable(false)
+  }
+})
+
 // IPC storage handlers for persistence
 let storageCache: Record<string, any> | null = null
 
@@ -103,7 +115,7 @@ function createWindow() {
     height: 600,
     resizable: false,
     frame: false,
-    backgroundColor: '#FFFBDE',
+    transparent: true,
     icon: path.join(process.env.VITE_PUBLIC, 'Logo_256.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),

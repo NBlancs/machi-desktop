@@ -29,6 +29,7 @@ interface PlacedBuilding {
   type: number
   date: number
   duration?: number
+  description?: string
 }
 
 const BUILDING_TYPES = [
@@ -237,6 +238,14 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false)
   const [selectedBuilding, setSelectedBuilding] = useState<PlacedBuilding | null>(null)
 
+  // Mini Mode and Transparency settings
+  const [isMiniMode, setIsMiniMode] = useState<boolean>(false)
+  const [transparentInMini, setTransparentInMini] = useState<boolean>(false)
+
+  // Task description
+  const [taskDescription, setTaskDescription] = useState<string>('')
+  const [isDescriptionModalOpen, setIsDescriptionModalOpen] = useState<boolean>(false)
+
   const svgRef = useRef<SVGSVGElement | null>(null)
   const ringAudioRef = useRef<HTMLAudioElement | null>(null)
   const targetTimeRef = useRef<number | null>(null)
@@ -303,6 +312,9 @@ function App() {
       const vol = await getStorageItem<number>('matchi_settings_volume', 0.5)
       setVolume(vol)
 
+      const transMini = await getStorageItem<boolean>('matchi_settings_transparent_in_mini', false)
+      setTransparentInMini(transMini)
+
       setIsLoaded(true)
     }
     loadAllState()
@@ -340,10 +352,47 @@ function App() {
   }, [volume, isLoaded])
 
   useEffect(() => {
+    if (!isLoaded) return
+    setStorageItem('matchi_settings_transparent_in_mini', transparentInMini)
+  }, [transparentInMini, isLoaded])
+
+  useEffect(() => {
     if (ringAudioRef.current) {
       ringAudioRef.current.volume = volume
     }
   }, [volume])
+
+  // Sync body class for styling and transparency
+  useEffect(() => {
+    if (isMiniMode) {
+      document.body.classList.add('mini-mode')
+      if (transparentInMini) {
+        document.body.classList.add('transparent-bg')
+        document.body.classList.remove('solid-bg')
+      } else {
+        document.body.classList.add('solid-bg')
+        document.body.classList.remove('transparent-bg')
+      }
+    } else {
+      document.body.classList.remove('mini-mode')
+      document.body.classList.remove('transparent-bg')
+      document.body.classList.remove('solid-bg')
+    }
+  }, [isMiniMode, transparentInMini])
+
+  const handleEnterMiniMode = () => {
+    setIsMiniMode(true)
+    if (window.ipcRenderer) {
+      window.ipcRenderer.send('window-set-mini-mode', true)
+    }
+  }
+
+  const handleExitMiniMode = () => {
+    setIsMiniMode(false)
+    if (window.ipcRenderer) {
+      window.ipcRenderer.send('window-set-mini-mode', false)
+    }
+  }
 
   // Sync Electron Always On Top status on start
   useEffect(() => {
@@ -504,17 +553,24 @@ function App() {
       setTimeout(() => {
         setTimerState('idle')
         setTimeLeft(duration * 60)
+        setTaskDescription('')
       }, 3000)
     } else {
       // Idle or completed
       setTimerState('idle')
       setTimeLeft(duration * 60)
+      setTaskDescription('')
     }
   }
 
   const handleCompletion = () => {
     setTimerState('completed')
     
+    // Auto-exit mini mode when completed so the user can see their city and the celebration modal
+    if (isMiniMode) {
+      handleExitMiniMode()
+    }
+
     if (soundEnabled) {
       playRingSound()
     }
@@ -541,7 +597,8 @@ function App() {
       id: Math.random().toString(36).substring(2, 9),
       type: currentBuildingType,
       date: Date.now(),
-      duration: duration
+      duration: duration,
+      description: taskDescription || undefined
     }
     setPlacedBuildings(prev => [...prev, newBuilding])
   }
@@ -551,6 +608,7 @@ function App() {
     setTimerState('idle')
     setCurrentBuildingType(prev => (prev % 3) + 1)
     setTimeLeft(duration * 60)
+    setTaskDescription('')
   }
 
   const handleResetCity = () => {
@@ -611,219 +669,372 @@ function App() {
 
   return (
     <>
-      {/* Title Bar */}
-      <div className="titlebar">
-        <div className="titlebar-logo">
-          <img src={logoImg} alt="Matchi" />
-          <img src={machiTextImg} alt="MATCHI" style={{ height: '10px', width: 'auto', marginLeft: '2px' }} />
-        </div>
-        <div className="titlebar-controls">
-          <button 
-            className={`titlebar-btn ${isSettingsOpen ? 'active' : ''}`}
-            onClick={() => setIsSettingsOpen(true)}
-            title="Settings"
-          >
-            ⚙️
-          </button>
-          <button 
-            className={`titlebar-btn ${isAlwaysOnTop ? 'active' : ''}`}
-            onClick={handleToggleAlwaysOnTop}
-            title={isAlwaysOnTop ? "Always-On-Top: On" : "Always-On-Top: Off"}
-          >
-            📌
-          </button>
-          <button className="titlebar-btn" onClick={handleMinimize} title="Minimize">
-            ➖
-          </button>
-          <button className="titlebar-btn close" onClick={handleClose} title="Close">
-            ❌
-          </button>
-        </div>
-      </div>
-
-      {/* Main Container */}
-      <div className="app-container">
-        
-        {/* Timer Section */}
-        <div className="timer-section">
-          <div 
-            className="svg-slider-container" 
-            onMouseDown={(e) => {
-              if (timerState === 'idle') {
-                setIsDragging(true)
-                handleDrag(e.clientX, e.clientY)
-              }
-            }}
-          >
-            <svg 
-              ref={svgRef}
-              width="190" 
-              height="190" 
-              viewBox="0 0 190 190"
-              style={{ transform: 'rotate(-90deg)' }}
+      {isMiniMode ? (
+        /* Mini Mode Layout */
+        <div className="mini-container">
+          {/* Mini Titlebar */}
+          <div className="mini-titlebar">
+            <div className="mini-titlebar-drag" style={{ flex: 1, height: '100%', WebkitAppRegion: 'drag' } as React.CSSProperties} />
+            <div className="mini-titlebar-controls">
+              <button 
+                className={`titlebar-btn ${isAlwaysOnTop ? 'active' : ''}`}
+                onClick={handleToggleAlwaysOnTop}
+                title={isAlwaysOnTop ? "Always-On-Top: On" : "Always-On-Top: Off"}
+              >
+                📌
+              </button>
+              <button 
+                className="titlebar-btn"
+                onClick={handleExitMiniMode}
+                title="Exit Mini Mode"
+              >
+                ↗️
+              </button>
+              <button className="titlebar-btn close" onClick={handleClose} title="Close">
+                ❌
+              </button>
+            </div>
+          </div>
+          
+          {/* Timer Section (Mini) */}
+          <div className="timer-section mini">
+            <div 
+              className="svg-slider-container" 
+              onMouseDown={(e) => {
+                if (timerState === 'idle') {
+                  setIsDragging(true)
+                  handleDrag(e.clientX, e.clientY)
+                }
+              }}
             >
-              {/* Background Circle */}
-              <circle
-                cx="95"
-                cy="95"
-                r={radius}
-                className="timer-circle-bg"
-                strokeWidth="6"
-              />
-              
-              {/* Progress Circle */}
-              <circle
-                cx="95"
-                cy="95"
-                r={radius}
-                className="timer-circle-progress"
-                strokeWidth="8"
-                strokeDasharray={circumference}
-                strokeDashoffset={strokeDashoffset}
-                stroke={timerState === 'abandoned' ? 'var(--accent-red)' : 'var(--primary-teal)'}
-              />
-
-              {/* Click target wrapper for smoother dragging */}
-              {timerState === 'idle' && (
+              <svg 
+                ref={svgRef}
+                width="190" 
+                height="190" 
+                viewBox="0 0 190 190"
+                style={{ transform: 'rotate(-90deg)' }}
+              >
+                {/* Background Circle */}
                 <circle
                   cx="95"
                   cy="95"
                   r={radius}
-                  className="timer-circle-interactive"
+                  className="timer-circle-bg"
+                  strokeWidth="6"
                 />
+                
+                {/* Progress Circle */}
+                <circle
+                  cx="95"
+                  cy="95"
+                  r={radius}
+                  className="timer-circle-progress"
+                  strokeWidth="8"
+                  strokeDasharray={circumference}
+                  strokeDashoffset={strokeDashoffset}
+                  stroke={timerState === 'abandoned' ? 'var(--accent-red)' : 'var(--primary-teal)'}
+                />
+
+                {/* Click target wrapper for smoother dragging */}
+                {timerState === 'idle' && (
+                  <circle
+                    cx="95"
+                    cy="95"
+                    r={radius}
+                    className="timer-circle-interactive"
+                  />
+                )}
+              </svg>
+
+              {/* Centered Timer Text */}
+              <div className="timer-center-text">
+                <span className="timer-time">{formatTime(timeLeft)}</span>
+                <span className="timer-label">{timerState === 'idle' ? 'set time' : timerState}</span>
+              </div>
+            </div>
+
+            {timerState !== 'idle' && taskDescription && (
+              <div className="active-task-label" title={taskDescription}>
+                Task: {taskDescription}
+              </div>
+            )}
+
+            {/* Controls */}
+            <div className="controls-container">
+              {timerState === 'idle' && (
+                <>
+                  <button className="machi-btn machi-btn-primary" onClick={handleStart}>
+                    ▶ Start
+                  </button>
+                  <button 
+                    className={`machi-btn machi-btn-secondary ${taskDescription ? 'active' : ''}`}
+                    onClick={() => setIsDescriptionModalOpen(true)}
+                    title={taskDescription ? `Task: ${taskDescription}` : "Add Task Description"}
+                  >
+                    📝
+                  </button>
+                </>
               )}
-            </svg>
 
-            {/* Centered Timer Text */}
-            <div className="timer-center-text">
-              <span className="timer-time">{formatTime(timeLeft)}</span>
-              <span className="timer-label">{timerState === 'idle' ? 'set time' : timerState}</span>
+              {(timerState === 'running' || timerState === 'paused') && (
+                <>
+                  <button className="machi-btn machi-btn-secondary" onClick={handlePauseResume}>
+                    {timerState === 'running' ? '⏸' : '▶'}
+                  </button>
+                  <button className="machi-btn machi-btn-danger" onClick={handleReset}>
+                    ⏹ Abandon
+                  </button>
+                </>
+              )}
+
+              {(timerState === 'completed' || timerState === 'abandoned') && (
+                <button className="machi-btn machi-btn-secondary" disabled>
+                  {timerState === 'completed' ? '🎉 Success' : '💥 Halted'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Normal Mode Layout */
+        <>
+          {/* Title Bar */}
+          <div className="titlebar">
+            <div className="titlebar-logo">
+              <img src={logoImg} alt="Matchi" />
+              <img src={machiTextImg} alt="MATCHI" style={{ height: '10px', width: 'auto', marginLeft: '2px' }} />
+            </div>
+            <div className="titlebar-controls">
+              <button 
+                className={`titlebar-btn ${isSettingsOpen ? 'active' : ''}`}
+                onClick={() => setIsSettingsOpen(true)}
+                title="Settings"
+              >
+                ⚙️
+              </button>
+              <button 
+                className={`titlebar-btn ${isAlwaysOnTop ? 'active' : ''}`}
+                onClick={handleToggleAlwaysOnTop}
+                title={isAlwaysOnTop ? "Always-On-Top: On" : "Always-On-Top: Off"}
+              >
+                📌
+              </button>
+              <button 
+                className="titlebar-btn"
+                onClick={handleEnterMiniMode}
+                title="Mini Mode"
+              >
+                🗗
+              </button>
+              <button className="titlebar-btn" onClick={handleMinimize} title="Minimize">
+                ➖
+              </button>
+              <button className="titlebar-btn close" onClick={handleClose} title="Close">
+                ❌
+              </button>
             </div>
           </div>
 
-          {/* Controls */}
-          <div className="controls-container">
-            {timerState === 'idle' && (
-              <button className="machi-btn machi-btn-primary" onClick={handleStart}>
-                ▶ Start
-              </button>
-            )}
-
-            {(timerState === 'running' || timerState === 'paused') && (
-              <>
-                <button className="machi-btn machi-btn-secondary" onClick={handlePauseResume}>
-                  {timerState === 'running' ? '⏸ Pause' : '▶ Resume'}
-                </button>
-                <button className="machi-btn machi-btn-danger" onClick={handleReset}>
-                  ⏹ Abandon
-                </button>
-              </>
-            )}
-
-            {(timerState === 'completed' || timerState === 'abandoned') && (
-              <button className="machi-btn machi-btn-secondary" disabled>
-                {timerState === 'completed' ? '🎉 Success' : '💥 Halted'}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Building Stage Area */}
-        <div className="construction-area">
-          <div className="construction-building-wrapper" style={{ backgroundImage: `url(${buildingBg})`, backgroundSize: '100% 100%' }}>
-            {timerState !== 'idle' && timerState !== 'abandoned' && (
-              <div className="construction-scaffold"></div>
-            )}
+          {/* Main Container */}
+          <div className="app-container">
             
-            {timerState === 'abandoned' ? (
-              <img 
-                src={abandonedSprite} 
-                className="building-sprite collapsed" 
-                alt="Collapsed Building" 
-              />
-            ) : (
-              timerState !== 'idle' && (
-                <img 
-                  src={currentSprite} 
-                  className="building-sprite" 
-                  alt="Building Progression" 
-                />
-              )
-            )}
-          </div>
-          <div className={`construction-label ${timerState === 'abandoned' ? 'halted' : ''}`}>
-            {constructionLabel}
-          </div>
-        </div>
-
-        {/* Skyline / City Section */}
-        <div className="city-section">
-          <div className="city-header">
-            <div className="city-title">
-              🏢 Matchi City
-            </div>
-            <div className="city-stats" title="Completed today / Total completed">
-              Today: {completedToday} | Total: {placedBuildings.length}
-            </div>
-          </div>
-
-          <div className="city-grid">
-            {gridCells.map((_, i) => {
-              const b = placedBuildings[i]
-              return (
-                <div 
-                  key={i} 
-                  className={`grid-cell ${b ? 'occupied' : ''}`}
-                  onClick={() => b && setSelectedBuilding(b)}
-                  style={{ cursor: b ? 'pointer' : 'default' }}
+            {/* Timer Section */}
+            <div className="timer-section">
+              <div 
+                className="svg-slider-container" 
+                onMouseDown={(e) => {
+                  if (timerState === 'idle') {
+                    setIsDragging(true)
+                    handleDrag(e.clientX, e.clientY)
+                  }
+                }}
+              >
+                <svg 
+                  ref={svgRef}
+                  width="190" 
+                  height="190" 
+                  viewBox="0 0 190 190"
+                  style={{ transform: 'rotate(-90deg)' }}
                 >
-                  {b ? (
-                    <>
-                      <img 
-                        src={BUILDING_TYPES[b.type - 1].completeSrc} 
-                        className="grid-building-img" 
-                        alt="Completed Building" 
-                        title={`Click to view details of slot ${i + 1}`}
-                      />
-                      <span className="grid-building-index">{i + 1}</span>
-                    </>
-                  ) : (
-                    <span className="grid-building-index" style={{ color: 'rgba(70, 130, 169, 0.2)' }}>{i + 1}</span>
+                  {/* Background Circle */}
+                  <circle
+                    cx="95"
+                    cy="95"
+                    r={radius}
+                    className="timer-circle-bg"
+                    strokeWidth="6"
+                  />
+                  
+                  {/* Progress Circle */}
+                  <circle
+                    cx="95"
+                    cy="95"
+                    r={radius}
+                    className="timer-circle-progress"
+                    strokeWidth="8"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={strokeDashoffset}
+                    stroke={timerState === 'abandoned' ? 'var(--accent-red)' : 'var(--primary-teal)'}
+                  />
+
+                  {/* Click target wrapper for smoother dragging */}
+                  {timerState === 'idle' && (
+                    <circle
+                      cx="95"
+                      cy="95"
+                      r={radius}
+                      className="timer-circle-interactive"
+                    />
                   )}
+                </svg>
+
+                {/* Centered Timer Text */}
+                <div className="timer-center-text">
+                  <span className="timer-time">{formatTime(timeLeft)}</span>
+                  <span className="timer-label">{timerState === 'idle' ? 'set time' : timerState}</span>
                 </div>
-              )
-            })}
-          </div>
+              </div>
 
-          {/* Settings and options */}
-          <div className="settings-bar">
-            <div className="toggle-group">
-              <label className="setting-toggle" title="Tick sound during countdown">
-                <input 
-                  type="checkbox" 
-                  checked={tickEnabled} 
-                  onChange={(e) => setTickEnabled(e.target.checked)} 
-                />
-                Tick
-              </label>
-              <label className="setting-toggle" title="Enable chime and ticking sounds">
-                <input 
-                  type="checkbox" 
-                  checked={soundEnabled} 
-                  onChange={(e) => setSoundEnabled(e.target.checked)} 
-                />
-                Sound
-              </label>
+              {timerState !== 'idle' && taskDescription && (
+                <div className="active-task-label" title={taskDescription}>
+                  Task: {taskDescription}
+                </div>
+              )}
+
+              {/* Controls */}
+              <div className="controls-container">
+                {timerState === 'idle' && (
+                  <>
+                    <button className="machi-btn machi-btn-primary" onClick={handleStart}>
+                      ▶ Start
+                    </button>
+                    <button 
+                      className={`machi-btn machi-btn-secondary ${taskDescription ? 'active' : ''}`}
+                      onClick={() => setIsDescriptionModalOpen(true)}
+                      title={taskDescription ? `Task: ${taskDescription}` : "Add Task Description"}
+                    >
+                      📝 {taskDescription ? 'Edit Task' : 'Add Task'}
+                    </button>
+                  </>
+                )}
+
+                {(timerState === 'running' || timerState === 'paused') && (
+                  <>
+                    <button className="machi-btn machi-btn-secondary" onClick={handlePauseResume}>
+                      {timerState === 'running' ? '⏸ Pause' : '▶ Resume'}
+                    </button>
+                    <button className="machi-btn machi-btn-danger" onClick={handleReset}>
+                      ⏹ Abandon
+                    </button>
+                  </>
+                )}
+
+                {(timerState === 'completed' || timerState === 'abandoned') && (
+                  <button className="machi-btn machi-btn-secondary" disabled>
+                    {timerState === 'completed' ? '🎉 Success' : '💥 Halted'}
+                  </button>
+                )}
+              </div>
             </div>
-            {placedBuildings.length > 0 && (
-              <span className="reset-city-link" onClick={handleResetCity}>
-                Reset City
-              </span>
-            )}
-          </div>
-        </div>
 
-      </div>
+            {/* Building Stage Area */}
+            <div className="construction-area">
+              <div className="construction-building-wrapper" style={{ backgroundImage: `url(${buildingBg})`, backgroundSize: '100% 100%' }}>
+                {timerState !== 'idle' && timerState !== 'abandoned' && (
+                  <div className="construction-scaffold"></div>
+                )}
+                
+                {timerState === 'abandoned' ? (
+                  <img 
+                    src={abandonedSprite} 
+                    className="building-sprite collapsed" 
+                    alt="Collapsed Building" 
+                  />
+                ) : (
+                  timerState !== 'idle' && (
+                    <img 
+                      src={currentSprite} 
+                      className="building-sprite" 
+                      alt="Building Progression" 
+                    />
+                  )
+                )}
+              </div>
+              <div className={`construction-label ${timerState === 'abandoned' ? 'halted' : ''}`}>
+                {constructionLabel}
+              </div>
+            </div>
+
+            {/* Skyline / City Section */}
+            <div className="city-section">
+              <div className="city-header">
+                <div className="city-title">
+                  🏢 Matchi City
+                </div>
+                <div className="city-stats" title="Completed today / Total completed">
+                  Today: {completedToday} | Total: {placedBuildings.length}
+                </div>
+              </div>
+
+              <div className="city-grid">
+                {gridCells.map((_, i) => {
+                  const b = placedBuildings[i]
+                  return (
+                    <div 
+                      key={i} 
+                      className={`grid-cell ${b ? 'occupied' : ''}`}
+                      onClick={() => b && setSelectedBuilding(b)}
+                      style={{ cursor: b ? 'pointer' : 'default' }}
+                    >
+                      {b ? (
+                        <>
+                          <img 
+                            src={BUILDING_TYPES[b.type - 1].completeSrc} 
+                            className="grid-building-img" 
+                            alt="Completed Building" 
+                            title={`Click to view details of slot ${i + 1}`}
+                          />
+                          <span className="grid-building-index">{i + 1}</span>
+                        </>
+                      ) : (
+                        <span className="grid-building-index" style={{ color: 'rgba(70, 130, 169, 0.2)' }}>{i + 1}</span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Settings and options */}
+              <div className="settings-bar">
+                <div className="toggle-group">
+                  <label className="setting-toggle" title="Tick sound during countdown">
+                    <input 
+                      type="checkbox" 
+                      checked={tickEnabled} 
+                      onChange={(e) => setTickEnabled(e.target.checked)} 
+                    />
+                    Tick
+                  </label>
+                  <label className="setting-toggle" title="Enable chime and ticking sounds">
+                    <input 
+                      type="checkbox" 
+                      checked={soundEnabled} 
+                      onChange={(e) => setSoundEnabled(e.target.checked)} 
+                    />
+                    Sound
+                  </label>
+                </div>
+                {placedBuildings.length > 0 && (
+                  <span className="reset-city-link" onClick={handleResetCity}>
+                    Reset City
+                  </span>
+                )}
+              </div>
+            </div>
+
+          </div>
+        </>
+      )}
 
       {/* Completion Celebrate Modal */}
       {timerState === 'completed' && (
@@ -871,6 +1082,17 @@ function App() {
                 <span style={{ fontSize: '16px' }}>🔊</span>
                 <span className="volume-value">{Math.round(volume * 100)}%</span>
               </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', alignItems: 'flex-start', margin: '5px 0' }}>
+              <label className="setting-toggle" style={{ fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <input 
+                  type="checkbox" 
+                  checked={transparentInMini} 
+                  onChange={(e) => setTransparentInMini(e.target.checked)} 
+                />
+                Transparent in Mini Mode
+              </label>
             </div>
 
             <button 
@@ -930,6 +1152,11 @@ function App() {
               <div>
                 <strong>📅 Completed On:</strong> {new Date(selectedBuilding.date).toLocaleString()}
               </div>
+              {selectedBuilding.description && (
+                <div style={{ marginTop: '6px', padding: '6px 8px', backgroundColor: 'rgba(70, 130, 169, 0.1)', borderRadius: '6px', borderLeft: '3px solid var(--primary-teal)', wordBreak: 'break-word' }}>
+                  <strong>📝 Task:</strong> {selectedBuilding.description}
+                </div>
+              )}
             </div>
 
             <button 
@@ -938,6 +1165,38 @@ function App() {
               style={{ width: '100%', justifyContent: 'center', marginTop: '10px' }}
             >
               Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Task Description Modal */}
+      {isDescriptionModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsDescriptionModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2 className="modal-title">TASK DESCRIPTION</h2>
+            <p className="modal-text">Enter what you are working on during this session:</p>
+            
+            <input
+              type="text"
+              placeholder="e.g. Coding Machi feature"
+              value={taskDescription}
+              onChange={(e) => setTaskDescription(e.target.value)}
+              className="task-modal-input"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  setIsDescriptionModalOpen(false)
+                }
+              }}
+            />
+
+            <button 
+              className="machi-btn machi-btn-primary" 
+              onClick={() => setIsDescriptionModalOpen(false)}
+              style={{ width: '100%', justifyContent: 'center', marginTop: '10px' }}
+            >
+              Save Description
             </button>
           </div>
         </div>
