@@ -32,6 +32,13 @@ interface PlacedBuilding {
   description?: string
 }
 
+interface CustomRingSound {
+  id: string
+  name: string
+  data: string // base64 string
+}
+
+
 const BUILDING_TYPES = [
   {
     id: 1,
@@ -237,6 +244,8 @@ function App() {
   const [volume, setVolume] = useState<number>(0.5)
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false)
   const [selectedBuilding, setSelectedBuilding] = useState<PlacedBuilding | null>(null)
+  const [selectedRingSound, setSelectedRingSound] = useState<string>('default')
+  const [customRingSounds, setCustomRingSounds] = useState<CustomRingSound[]>([])
 
   // Mini Mode and Transparency settings
   const [isMiniMode, setIsMiniMode] = useState<boolean>(false)
@@ -249,12 +258,24 @@ function App() {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const ringAudioRef = useRef<HTMLAudioElement | null>(null)
   const targetTimeRef = useRef<number | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const playRingSound = () => {
-    if (!ringAudioRef.current) {
-      ringAudioRef.current = new Audio(matchiRingSound)
-      ringAudioRef.current.loop = true
+    if (ringAudioRef.current) {
+      ringAudioRef.current.pause()
+      ringAudioRef.current = null
     }
+
+    let soundSrc = matchiRingSound
+    if (selectedRingSound !== 'default') {
+      const custom = customRingSounds.find(s => s.id === selectedRingSound)
+      if (custom) {
+        soundSrc = custom.data
+      }
+    }
+
+    ringAudioRef.current = new Audio(soundSrc)
+    ringAudioRef.current.loop = true
     ringAudioRef.current.volume = volume
     ringAudioRef.current.currentTime = 0
     ringAudioRef.current.play().catch(e => console.warn("Failed to play ring sound:", e))
@@ -264,6 +285,50 @@ function App() {
     if (ringAudioRef.current) {
       ringAudioRef.current.pause()
       ringAudioRef.current.currentTime = 0
+    }
+  }
+
+  const handleImportSound = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith('audio/')) {
+      alert('Please select a valid audio file.')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string
+      if (!dataUrl) return
+
+      const soundId = 'ring_' + Date.now()
+      const soundName = file.name.replace(/\.[^/.]+$/, "")
+
+      const newSound: CustomRingSound = {
+        id: soundId,
+        name: soundName,
+        data: dataUrl
+      }
+
+      setCustomRingSounds(prev => [...prev, newSound])
+      setSelectedRingSound(soundId)
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+    reader.onerror = () => {
+      alert('Failed to read the audio file.')
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleDeleteSound = (id: string) => {
+    stopRingSound()
+    setCustomRingSounds(prev => prev.filter(s => s.id !== id))
+    if (selectedRingSound === id) {
+      setSelectedRingSound('default')
     }
   }
 
@@ -315,6 +380,12 @@ function App() {
       const transMini = await getStorageItem<boolean>('matchi_settings_transparent_in_mini', false)
       setTransparentInMini(transMini)
 
+      const selRing = await getStorageItem<string>('matchi_settings_selected_ring', 'default')
+      setSelectedRingSound(selRing)
+
+      const customRings = await getStorageItem<CustomRingSound[]>('matchi_settings_custom_rings', [])
+      setCustomRingSounds(customRings)
+
       setIsLoaded(true)
     }
     loadAllState()
@@ -355,6 +426,16 @@ function App() {
     if (!isLoaded) return
     setStorageItem('matchi_settings_transparent_in_mini', transparentInMini)
   }, [transparentInMini, isLoaded])
+
+  useEffect(() => {
+    if (!isLoaded) return
+    setStorageItem('matchi_settings_selected_ring', selectedRingSound)
+  }, [selectedRingSound, isLoaded])
+
+  useEffect(() => {
+    if (!isLoaded) return
+    setStorageItem('matchi_settings_custom_rings', customRingSounds)
+  }, [customRingSounds, isLoaded])
 
   useEffect(() => {
     if (ringAudioRef.current) {
@@ -1082,6 +1163,111 @@ function App() {
                 <span style={{ fontSize: '16px' }}>🔊</span>
                 <span className="volume-value">{Math.round(volume * 100)}%</span>
               </div>
+            </div>
+
+            <div className="ringtone-select-container" style={{ width: '100%', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label className="modal-text" style={{ fontWeight: 600 }}>Ringtone Sound</label>
+              <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+                <select
+                  value={selectedRingSound}
+                  onChange={(e) => {
+                    stopRingSound()
+                    setSelectedRingSound(e.target.value)
+                  }}
+                  style={{
+                    flexGrow: 1,
+                    padding: '6px 8px',
+                    borderRadius: '8px',
+                    border: '2px solid var(--dark-teal)',
+                    backgroundColor: 'white',
+                    color: 'var(--dark-teal)',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: '12px',
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="default">Default Chime</option>
+                  {customRingSounds.map((sound) => (
+                    <option key={sound.id} value={sound.id}>
+                      {sound.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="machi-btn machi-btn-secondary"
+                  style={{ padding: '6px 12px', fontSize: '12px', height: 'auto', border: '2px solid var(--dark-teal)', borderRadius: '8px', boxShadow: 'none' }}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  📥 Import
+                </button>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept="audio/*"
+                  onChange={handleImportSound}
+                  style={{ display: 'none' }}
+                />
+              </div>
+
+              {customRingSounds.length > 0 && (
+                <div 
+                  className="custom-sounds-list"
+                  style={{
+                    maxHeight: '80px',
+                    overflowY: 'auto',
+                    width: '100%',
+                    backgroundColor: 'rgba(70, 130, 169, 0.05)',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(42, 78, 102, 0.2)',
+                    padding: '4px 6px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    marginTop: '4px'
+                  }}
+                >
+                  {customRingSounds.map(sound => (
+                    <div 
+                      key={sound.id}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        fontSize: '11px',
+                        padding: '2px 4px',
+                        borderRadius: '4px',
+                        backgroundColor: 'rgba(255, 255, 255, 0.6)'
+                      }}
+                    >
+                      <span style={{ 
+                        textOverflow: 'ellipsis', 
+                        overflow: 'hidden', 
+                        whiteSpace: 'nowrap',
+                        maxWidth: '200px',
+                        color: 'var(--dark-teal)' 
+                      }}>
+                        🎵 {sound.name}
+                      </span>
+                      <button
+                        onClick={() => handleDeleteSound(sound.id)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: 'var(--accent-red)',
+                          padding: '0 4px',
+                          fontSize: '12px'
+                        }}
+                        title="Delete custom sound"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', alignItems: 'flex-start', margin: '5px 0' }}>
