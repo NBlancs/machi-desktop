@@ -61,7 +61,7 @@ ipcMain.on('window-set-mini-mode', (_event, isMini: boolean) => {
     if (isMini) {
       win.setSize(220, 310)
     } else {
-      win.setSize(400, 600)
+      win.setSize(400, 660)
     }
     win.setResizable(false)
   }
@@ -112,7 +112,7 @@ ipcMain.handle('store-set', async (_event, key: string, value: any) => {
 function createWindow() {
   win = new BrowserWindow({
     width: 400,
-    height: 600,
+    height: 660,
     resizable: false,
     frame: false,
     transparent: true,

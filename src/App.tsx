@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { playTick } from './audio'
 
 
@@ -9,20 +9,20 @@ import machiTextImg from './assets/MACHI.png'
 import buildingBg from './assets/building-bg.png'
 import matchiRingSound from './assets/sounds/matchi_ring_sound.mp3'
 
-// Building 1 (Machi Tower)
-import b1_stage1 from './assets/pixel-building-bg-removed 1.png'
-import b1_complete from './assets/pixel-building-bg-removed.png'
 
-// Building 2 (Teal Office)
-import b2_stage1 from './assets/pixel-building-2-removebg-preview 1.png'
-import b2_stage2 from './assets/pixel-building-2-removebg-preview 2.png'
-import b2_stage3 from './assets/pixel-building-2-removebg-preview 3.png'
-import b2_complete from './assets/pixel-building-2-removebg-preview.png'
+// Tile Assets
+import tileConcrete from './assets/tiles/concrete.png'
+import tileGrass from './assets/tiles/grass.png'
+import tileRoad from './assets/tiles/road.png'
+import tileTree from './assets/tiles/tree.png'
 
-// Building 3 (Sky Apartments)
-import b3_stage1 from './assets/pixel-building-3-removebg-preview 1.png'
-import b3_stage2 from './assets/pixel-building-3-removebg-preview 2.png'
-import b3_complete from './assets/pixel-building-3-removebg-preview.png'
+// Building Assets
+import b1 from './assets/individiual_buildings/building_1.png'
+import b2 from './assets/individiual_buildings/building_2.png'
+import b3 from './assets/individiual_buildings/building_3.png'
+import b4 from './assets/individiual_buildings/building_4.png'
+import b5 from './assets/individiual_buildings/building_5.png'
+import b6 from './assets/individiual_buildings/building_6.png'
 
 interface PlacedBuilding {
   id: string
@@ -43,32 +43,38 @@ const BUILDING_TYPES = [
   {
     id: 1,
     name: "Matchi Tower",
-    stages: [
-      { threshold: 0, src: b1_stage1 },
-      { threshold: 0.7, src: b1_complete }
-    ],
-    completeSrc: b1_complete
+    stages: [{ threshold: 0, src: b1 }],
+    completeSrc: b1
   },
   {
     id: 2,
     name: "Teal Office",
-    stages: [
-      { threshold: 0, src: b2_stage1 },
-      { threshold: 0.3, src: b2_stage2 },
-      { threshold: 0.6, src: b2_stage3 },
-      { threshold: 0.85, src: b2_complete }
-    ],
-    completeSrc: b2_complete
+    stages: [{ threshold: 0, src: b2 }],
+    completeSrc: b2
   },
   {
     id: 3,
     name: "Sky Apartments",
-    stages: [
-      { threshold: 0, src: b3_stage1 },
-      { threshold: 0.45, src: b3_stage2 },
-      { threshold: 0.8, src: b3_complete }
-    ],
-    completeSrc: b3_complete
+    stages: [{ threshold: 0, src: b3 }],
+    completeSrc: b3
+  },
+  {
+    id: 4,
+    name: "Grand Hotel",
+    stages: [{ threshold: 0, src: b4 }],
+    completeSrc: b4
+  },
+  {
+    id: 5,
+    name: "Tech Hub",
+    stages: [{ threshold: 0, src: b5 }],
+    completeSrc: b5
+  },
+  {
+    id: 6,
+    name: "Crystal Palace",
+    stages: [{ threshold: 0, src: b6 }],
+    completeSrc: b6
   }
 ]
 
@@ -236,6 +242,7 @@ function App() {
   const [timerState, setTimerState] = useState<TimerState>('idle')
   const [isDragging, setIsDragging] = useState<boolean>(false)
   const [abandonedSprite, setAbandonedSprite] = useState<string>('')
+  const [abandonedProgress, setAbandonedProgress] = useState<number>(0)
 
   // Settings
   const [isAlwaysOnTop, setIsAlwaysOnTop] = useState<boolean>(false)
@@ -244,6 +251,9 @@ function App() {
   const [volume, setVolume] = useState<number>(0.5)
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false)
   const [selectedBuilding, setSelectedBuilding] = useState<PlacedBuilding | null>(null)
+  const [isFullCityModalOpen, setIsFullCityModalOpen] = useState<boolean>(false)
+  const [activeCardIndex, setActiveCardIndex] = useState<number>(0)
+  const [cardSortOrder, setCardSortOrder] = useState<'asc' | 'desc'>('desc')
   const [selectedRingSound, setSelectedRingSound] = useState<string>('default')
   const [customRingSounds, setCustomRingSounds] = useState<CustomRingSound[]>([])
 
@@ -259,6 +269,7 @@ function App() {
   const ringAudioRef = useRef<HTMLAudioElement | null>(null)
   const targetTimeRef = useRef<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const cityGridRef = useRef<HTMLDivElement | null>(null)
 
   const playRingSound = () => {
     if (ringAudioRef.current) {
@@ -621,13 +632,9 @@ function App() {
       // Abandoned state transition
       const progress = (duration * 60 - timeLeft) / (duration * 60)
       const currentBuilding = BUILDING_TYPES[currentBuildingType - 1]
-      let currentSprite = currentBuilding.stages[0].src
-      for (const stage of currentBuilding.stages) {
-        if (progress >= stage.threshold) {
-          currentSprite = stage.src
-        }
-      }
+      const currentSprite = currentBuilding.completeSrc
       setAbandonedSprite(currentSprite)
+      setAbandonedProgress(progress)
       setTimerState('abandoned')
 
       // Wait 3 seconds showing halted building, then reset
@@ -687,7 +694,7 @@ function App() {
   const handleDismissModal = () => {
     stopRingSound()
     setTimerState('idle')
-    setCurrentBuildingType(prev => (prev % 3) + 1)
+    setCurrentBuildingType(prev => (prev % BUILDING_TYPES.length) + 1)
     setTimeLeft(duration * 60)
     setTaskDescription('')
   }
@@ -735,9 +742,80 @@ function App() {
     : timeLeft / (duration * 60)
   const strokeDashoffset = circumference * (1 - progressFraction)
 
-  // Grid Cells list (minimum 12, grows in rows of 4)
-  const numCells = Math.max(12, Math.ceil(placedBuildings.length / 4) * 4)
-  const gridCells = Array.from({ length: numCells })
+  // Isometric Grid calculation
+  const colsSlots = 4
+  const rowsSlots = Math.max(3, Math.ceil(placedBuildings.length / colsSlots))
+  const gridRows = rowsSlots * 2 + 1
+  const gridCols = colsSlots * 2 + 1
+  const TILE_WIDTH = 64
+  const TILE_HEIGHT = 32
+  const boardWidth = (gridCols + gridRows) * (TILE_WIDTH / 2)
+  const boardHeight = (gridCols + gridRows) * (TILE_HEIGHT / 2) + 90
+
+  const isometricGrid = useMemo(() => {
+    // 1. Initialize all cells with grass (No trees!)
+    const grid: {
+      type: 'grass' | 'tree' | 'concrete' | 'road' | 'building'
+      building: PlacedBuilding | null
+      slotIndex: number | null
+      r: number
+      c: number
+    }[][] = Array.from({ length: gridRows }, (_, r) =>
+      Array.from({ length: gridCols }, (_, c) => {
+        return {
+          type: 'grass',
+          building: null,
+          slotIndex: null,
+          r,
+          c
+        }
+      })
+    )
+
+    // 2. Lay down building slots on the grass grid
+    for (let slotIdx = 0; slotIdx < rowsSlots * colsSlots; slotIdx++) {
+      const rowSlot = Math.floor(slotIdx / colsSlots)
+      const colSlot = slotIdx % colsSlots
+      const br = 1 + rowSlot * 2
+      const bc = 1 + colSlot * 2
+
+      const isOccupied = slotIdx < placedBuildings.length
+      const buildingData = isOccupied ? placedBuildings[slotIdx] : null
+
+      if (br < gridRows && bc < gridCols) {
+        grid[br][bc].type = isOccupied ? 'building' : 'grass'
+        grid[br][bc].building = buildingData
+        grid[br][bc].slotIndex = slotIdx + 1
+      }
+    }
+
+    return grid.flat()
+  }, [placedBuildings, gridRows, gridCols, rowsSlots])
+
+  // Center city view when active buildings change
+  useEffect(() => {
+    if (cityGridRef.current) {
+      const container = cityGridRef.current
+      container.scrollLeft = (container.scrollWidth - container.clientWidth) / 2
+      container.scrollTop = (container.scrollHeight - container.clientHeight) / 2
+    }
+  }, [placedBuildings.length, isLoaded])
+
+  const getRoadOrientation = (_r: number, _c: number) => {
+    return 'horizontal'
+  }
+
+  const getTileSrc = (type: 'grass' | 'tree' | 'concrete' | 'road' | 'building') => {
+    switch (type) {
+      case 'concrete': return tileConcrete
+      case 'road': return tileRoad
+      case 'tree': return tileTree
+      case 'building': return tileGrass
+      case 'grass':
+      default:
+        return tileGrass
+    }
+  }
 
   // Stats completed today
   const startOfDay = new Date()
@@ -1025,11 +1103,15 @@ function App() {
                   <div className="construction-scaffold"></div>
                 )}
                 
-                {timerState === 'abandoned' ? (
+              {timerState === 'abandoned' ? (
                   <img 
                     src={abandonedSprite} 
                     className="building-sprite collapsed" 
                     alt="Collapsed Building" 
+                    style={{
+                      clipPath: `inset(${(1 - abandonedProgress) * 100}% 0 0 0)`,
+                      filter: 'grayscale(1) opacity(0.5) contrast(0.8)'
+                    }}
                   />
                 ) : (
                   timerState !== 'idle' && (
@@ -1037,6 +1119,10 @@ function App() {
                       src={currentSprite} 
                       className="building-sprite" 
                       alt="Building Progression" 
+                      style={{
+                        clipPath: `inset(${(1 - progress) * 100}% 0 0 0)`,
+                        filter: `grayscale(${Math.max(0, 1 - progress * 1.5)}) opacity(${0.3 + progress * 0.7})`
+                      }}
                     />
                   )
                 )}
@@ -1046,11 +1132,43 @@ function App() {
               </div>
             </div>
 
-            {/* Skyline / City Section */}
             <div className="city-section">
               <div className="city-header">
-                <div className="city-title">
-                  🏢 Matchi City
+                <div className="city-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  Matchi City
+                  <button 
+                    className="machi-btn" 
+                    onClick={() => setIsFullCityModalOpen(true)}
+                    style={{ 
+                      padding: '2px 6px', 
+                      fontSize: '10px', 
+                      height: '20px', 
+                      boxShadow: '0 2px 0 var(--dark-teal)',
+                      marginTop: '0px'
+                    }}
+                    title="Expand city to full screen view"
+                  >
+                    🗺️ Expand
+                  </button>
+                  {placedBuildings.length > 0 && (
+                    <button 
+                      className="machi-btn" 
+                      onClick={() => {
+                        setCardSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
+                        setActiveCardIndex(0)
+                      }}
+                      style={{ 
+                        padding: '2px 6px', 
+                        fontSize: '10px', 
+                        height: '20px', 
+                        boxShadow: '0 2px 0 var(--dark-teal)',
+                        marginTop: '0px'
+                      }}
+                      title={`Sort cards by Date: currently ${cardSortOrder === 'asc' ? 'Oldest first' : 'Newest first'}`}
+                    >
+                      {cardSortOrder === 'asc' ? '📅 ⬆️ Asc' : '📅 ⬇️ Desc'}
+                    </button>
+                  )}
                 </div>
                 <div className="city-stats" title="Completed today / Total completed">
                   Today: {completedToday} | Total: {placedBuildings.length}
@@ -1058,31 +1176,94 @@ function App() {
               </div>
 
               <div className="city-grid">
-                {gridCells.map((_, i) => {
-                  const b = placedBuildings[i]
-                  return (
-                    <div 
-                      key={i} 
-                      className={`grid-cell ${b ? 'occupied' : ''}`}
-                      onClick={() => b && setSelectedBuilding(b)}
-                      style={{ cursor: b ? 'pointer' : 'default' }}
-                    >
-                      {b ? (
-                        <>
-                          <img 
-                            src={BUILDING_TYPES[b.type - 1].completeSrc} 
-                            className="grid-building-img" 
-                            alt="Completed Building" 
-                            title={`Click to view details of slot ${i + 1}`}
-                          />
-                          <span className="grid-building-index">{i + 1}</span>
-                        </>
-                      ) : (
-                        <span className="grid-building-index" style={{ color: 'rgba(70, 130, 169, 0.2)' }}>{i + 1}</span>
-                      )}
+                {placedBuildings.length === 0 ? (
+                  <div className="empty-slider-state">
+                    <div className="empty-card-placeholder">
+                      <span className="empty-card-icon">🏗️</span>
+                      <p className="empty-card-text">No buildings yet</p>
+                      <p className="empty-card-subtext">Complete a timer to build your city!</p>
                     </div>
-                  )
-                })}
+                  </div>
+                ) : (
+                  (() => {
+                    const sortedBuildings = placedBuildings
+                      .map((b, idx) => ({ ...b, originalIdx: idx }))
+                      .sort((a, b) => {
+                        if (cardSortOrder === 'asc') {
+                          return a.date - b.date
+                        } else {
+                          return b.date - a.date
+                        }
+                      })
+
+                    const maxStart = Math.max(0, sortedBuildings.length - 3)
+                    const activeIndex = Math.min(activeCardIndex, maxStart)
+                    const visibleBuildings = sortedBuildings.slice(activeIndex, activeIndex + 3)
+
+                    return (
+                      <div className="building-slider-container">
+                        <button 
+                          className="slider-nav-btn prev"
+                          disabled={activeIndex === 0}
+                          onClick={() => setActiveCardIndex(prev => Math.max(0, prev - 1))}
+                        >
+                          ◀
+                        </button>
+                        
+                        <div className="pk-cards-row">
+                          {visibleBuildings.map((currentBuilding) => {
+                            const bType = BUILDING_TYPES[currentBuilding.type - 1]
+                            return (
+                              <div 
+                                key={currentBuilding.id || currentBuilding.originalIdx} 
+                                className="pokemon-card"
+                                onClick={() => setSelectedBuilding(currentBuilding)}
+                                title="Click to view full details"
+                              >
+                                <div className="pk-card-header">
+                                  <span className="pk-card-name">{bType.name}</span>
+                                  <span className="pk-card-slot">#{currentBuilding.originalIdx + 1}</span>
+                                </div>
+                                
+                                <div className="pk-card-img-container">
+                                  <img 
+                                    src={bType.completeSrc} 
+                                    className="pk-card-img" 
+                                    alt="Building Sprite"
+                                  />
+                                </div>
+                                
+                                <div className="pk-card-details">
+                                  <div className="pk-detail-row">
+                                    <span className="pk-detail-label">⏱ Dur</span>
+                                    <span className="pk-detail-value">{currentBuilding.duration || 25}m</span>
+                                  </div>
+                                  <div className="pk-detail-row">
+                                    <span className="pk-detail-label">📅</span>
+                                    <span className="pk-detail-value">
+                                      {(() => {
+                                        const d = new Date(currentBuilding.date)
+                                        return `${d.getMonth()+1}/${d.getDate()}/${String(d.getFullYear()).slice(-2)}`
+                                      })()}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+
+                        <button 
+                          className="slider-nav-btn next"
+                          disabled={activeIndex >= maxStart}
+                          onClick={() => setActiveCardIndex(prev => Math.min(maxStart, prev + 1))}
+                        >
+                          ▶
+                        </button>
+                      </div>
+                    )
+                  })()
+                )}
               </div>
 
               {/* Settings and options */}
@@ -1309,6 +1490,86 @@ function App() {
             >
               Save & Close
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Full City View Modal */}
+      {isFullCityModalOpen && (
+        <div className="modal-overlay full-city-overlay" onClick={() => setIsFullCityModalOpen(false)}>
+          <div className="modal-content full-city-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '10px' }}>
+              <h2 className="modal-title" style={{ margin: 0 }}>🏢 MATCHT CITY</h2>
+              <button 
+                className="machi-btn machi-btn-danger" 
+                onClick={() => setIsFullCityModalOpen(false)}
+                style={{ padding: '4px 10px', fontSize: '12px', height: '28px', minWidth: 'auto', boxShadow: '0 2px 0 var(--dark-teal)' }}
+              >
+                ✕ Close
+              </button>
+            </div>
+            
+            <div className="city-stats" style={{ marginBottom: '12px', fontSize: '14px', textAlign: 'center', fontFamily: 'var(--font-pixel)' }}>
+              Today: {completedToday} | Total Completed: {placedBuildings.length}
+            </div>
+
+            <div className="city-grid-full" style={{ flex: 1, width: '100%', overflow: 'auto', border: '2px solid var(--primary-teal)', borderRadius: '8px', position: 'relative', backgroundColor: 'rgba(145, 184, 228, 0.08)' }}>
+              <div className="isometric-board" style={{ width: `${boardWidth}px`, height: `${boardHeight}px`, position: 'relative' }}>
+                {isometricGrid.map((tile, i) => {
+                  const { type, building, slotIndex, r, c } = tile
+                  const left = (c - r) * (TILE_WIDTH / 2) + (gridRows - 1) * (TILE_WIDTH / 2)
+                  const top = (c + r) * (TILE_HEIGHT / 2) + 90
+                  
+                  return (
+                    <div
+                      key={`full-${i}`}
+                      className={`tile-cell ${type} ${building ? 'occupied' : ''} ${type === 'road' ? 'road-' + getRoadOrientation(r, c) : ''}`}
+                      onClick={() => building && setSelectedBuilding(building)}
+                      style={{
+                        position: 'absolute',
+                        left: `${left}px`,
+                        top: `${top}px`,
+                        zIndex: r + c,
+                        cursor: building ? 'pointer' : 'default'
+                      }}
+                    >
+                      <img src={getTileSrc(type)} className="tile-img" alt={type} />
+                      
+                      {type === 'building' && building && (
+                        <img
+                          src={BUILDING_TYPES[building.type - 1].completeSrc}
+                          className="tile-building-img"
+                          alt="Completed Building"
+                          title={`Click to view details of slot ${slotIndex}`}
+                        />
+                      )}
+
+                      {slotIndex !== null && (
+                        <span 
+                          className="tile-index-label"
+                          style={{
+                            position: 'absolute',
+                            top: type === 'building' ? '-10px' : '50%',
+                            left: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            fontSize: '8px',
+                            fontFamily: 'var(--font-pixel)',
+                            color: building ? 'var(--dark-teal)' : 'rgba(70, 130, 169, 0.4)',
+                            zIndex: r + c + 1,
+                            backgroundColor: building ? 'rgba(255,255,255,0.7)' : 'transparent',
+                            padding: building ? '1px 3px' : '0',
+                            borderRadius: '2px',
+                            pointerEvents: 'none'
+                          }}
+                        >
+                          {slotIndex}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           </div>
         </div>
       )}
