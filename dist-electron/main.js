@@ -1,119 +1,86 @@
-import { app, ipcMain, BrowserWindow } from "electron";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
-import fs from "node:fs/promises";
-app.name = "Matchi";
-if (process.platform === "win32") {
-  app.setAppUserModelId("Matchi");
-}
-const __dirname$1 = path.dirname(fileURLToPath(import.meta.url));
-process.env.APP_ROOT = path.join(__dirname$1, "..");
-const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
-const MAIN_DIST = path.join(process.env.APP_ROOT, "dist-electron");
-const RENDERER_DIST = path.join(process.env.APP_ROOT, "dist");
-process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, "public") : RENDERER_DIST;
-let win;
-ipcMain.on("window-minimize", () => {
-  win == null ? void 0 : win.minimize();
+import { app as s, ipcMain as r, BrowserWindow as d } from "electron";
+import { fileURLToPath as g } from "node:url";
+import n from "node:path";
+import i from "node:fs/promises";
+s.name = "Matchi";
+process.platform === "win32" && s.setAppUserModelId("Matchi");
+const f = n.dirname(g(import.meta.url));
+process.env.APP_ROOT = n.join(f, "..");
+const l = process.env.VITE_DEV_SERVER_URL, y = n.join(process.env.APP_ROOT, "dist-electron"), p = n.join(process.env.APP_ROOT, "dist");
+process.env.VITE_PUBLIC = l ? n.join(process.env.APP_ROOT, "public") : p;
+let e;
+r.on("window-minimize", () => {
+  e == null || e.minimize();
 });
-ipcMain.on("window-close", () => {
-  win == null ? void 0 : win.close();
+r.on("window-close", () => {
+  e == null || e.close();
 });
-ipcMain.handle("window-toggle-always-on-top", () => {
-  if (win) {
-    const isTop = !win.isAlwaysOnTop();
-    win.setAlwaysOnTop(isTop, "screen-saver");
-    return isTop;
+r.handle("window-toggle-always-on-top", () => {
+  if (e) {
+    const t = !e.isAlwaysOnTop();
+    return e.setAlwaysOnTop(t, "screen-saver"), t;
   }
-  return false;
+  return !1;
 });
-ipcMain.handle("window-get-always-on-top", () => {
-  return win ? win.isAlwaysOnTop() : false;
+r.handle("window-get-always-on-top", () => e ? e.isAlwaysOnTop() : !1);
+r.on("window-set-mini-mode", (t, o) => {
+  e && (e.setResizable(!0), o ? e.setSize(220, 310) : e.setSize(400, 660), e.setResizable(!1));
 });
-ipcMain.on("window-set-mini-mode", (_event, isMini) => {
-  if (win) {
-    win.setResizable(true);
-    if (isMini) {
-      win.setSize(220, 310);
-    } else {
-      win.setSize(400, 660);
+let a = null;
+function u() {
+  return n.join(s.getPath("userData"), "storage.json");
+}
+async function w() {
+  if (a !== null) return a;
+  try {
+    const t = u(), o = await i.readFile(t, "utf-8");
+    a = JSON.parse(o);
+  } catch {
+    a = {};
+  }
+  return a || {};
+}
+async function _() {
+  if (a !== null)
+    try {
+      const t = u();
+      await i.mkdir(n.dirname(t), { recursive: !0 }), await i.writeFile(t, JSON.stringify(a, null, 2), "utf-8");
+    } catch (t) {
+      console.error("Failed to save storage cache to disk:", t);
     }
-    win.setResizable(false);
-  }
-});
-let storageCache = null;
-function getStoragePath() {
-  return path.join(app.getPath("userData"), "storage.json");
 }
-async function loadStorageCache() {
-  if (storageCache !== null) return storageCache;
-  try {
-    const filePath = getStoragePath();
-    const content = await fs.readFile(filePath, "utf-8");
-    storageCache = JSON.parse(content);
-  } catch (err) {
-    storageCache = {};
-  }
-  return storageCache || {};
-}
-async function saveStorageCache() {
-  if (storageCache === null) return;
-  try {
-    const filePath = getStoragePath();
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.writeFile(filePath, JSON.stringify(storageCache, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Failed to save storage cache to disk:", err);
-  }
-}
-ipcMain.handle("store-get", async (_event, key) => {
-  const cache = await loadStorageCache();
-  return cache[key] ?? null;
+r.handle("store-get", async (t, o) => (await w())[o] ?? null);
+r.handle("store-set", async (t, o, c) => {
+  const m = await w();
+  return m[o] = c, await _(), !0;
 });
-ipcMain.handle("store-set", async (_event, key, value) => {
-  const cache = await loadStorageCache();
-  cache[key] = value;
-  await saveStorageCache();
-  return true;
-});
-function createWindow() {
-  win = new BrowserWindow({
+function h() {
+  e = new d({
     width: 400,
     height: 660,
-    resizable: false,
-    frame: false,
-    transparent: true,
-    icon: path.join(process.env.VITE_PUBLIC, "Logo_256.png"),
+    resizable: !1,
+    frame: !1,
+    transparent: !0,
+    icon: n.join(process.env.VITE_PUBLIC, "Logo_256.png"),
     webPreferences: {
-      preload: path.join(__dirname$1, "preload.mjs"),
-      nodeIntegration: false,
-      contextIsolation: true,
-      backgroundThrottling: false
+      preload: n.join(f, "preload.mjs"),
+      nodeIntegration: !1,
+      contextIsolation: !0,
+      backgroundThrottling: !1
     }
-  });
-  win.webContents.on("did-finish-load", () => {
-    win == null ? void 0 : win.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
-  });
-  if (VITE_DEV_SERVER_URL) {
-    win.loadURL(VITE_DEV_SERVER_URL);
-  } else {
-    win.loadFile(path.join(RENDERER_DIST, "index.html"));
-  }
+  }), e.webContents.on("did-finish-load", () => {
+    e == null || e.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
+  }), l ? e.loadURL(l) : e.loadFile(n.join(p, "index.html"));
 }
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-    win = null;
-  }
+s.on("window-all-closed", () => {
+  process.platform !== "darwin" && (s.quit(), e = null);
 });
-app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
-  }
+s.on("activate", () => {
+  d.getAllWindows().length === 0 && h();
 });
-app.whenReady().then(createWindow);
+s.whenReady().then(h);
 export {
-  MAIN_DIST,
-  RENDERER_DIST,
-  VITE_DEV_SERVER_URL
+  y as MAIN_DIST,
+  p as RENDERER_DIST,
+  l as VITE_DEV_SERVER_URL
 };
